@@ -1,36 +1,29 @@
-
 provider "aws" {
-region = "us-east-1"
+  region = "us-east-1"
 }
 
 terraform {
-   backend "s3" {
-      bucket = "state-ki-bkt"
-      key    = "state/terraform.tfstate"
-      region = "us-east-1"
+  backend "s3" {
+    bucket = "state-ki-bkt"
+    key    = "state/terraform.tfstate"
+    region = "us-east-1"
   }
-
 }
 
-# Create an IAM Role for the EKS Cluster
+# --- IAM Roles (Unchanged) ---
+
 resource "aws_iam_role" "eks_cluster_role" {
   name = "eks-cluster-role"
-
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "eks.amazonaws.com"
-        }
-      }
-    ]
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "eks.amazonaws.com" }
+    }]
   })
 }
 
-# Attach necessary policies to the EKS Cluster IAM Role
 resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
@@ -41,25 +34,18 @@ resource "aws_iam_role_policy_attachment" "eks_service_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 }
 
-# Create an IAM Role for the Node Group
 resource "aws_iam_role" "eks_node_role" {
   name = "eks-node-role"
-
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
   })
 }
 
-# Attach necessary policies to the Node Group IAM Role
 resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
@@ -75,24 +61,34 @@ resource "aws_iam_role_policy_attachment" "ec2_container_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-# Fetch the Default VPC and Subnets
+# --- VPC & SUBNET LOGIC (CORRECTED) ---
+
 data "aws_vpc" "default" {
   default = true
 }
 
+# Fetch subnets while EXCLUDING us-east-1e
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
+
+  # This filter ensures we don't pick up the unsupported zone
+  filter {
+    name   = "availability-zone"
+    values = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f"]
+  }
 }
 
-# Create an EKS Cluster
+# --- EKS CLUSTER & NODE GROUP ---
+
 resource "aws_eks_cluster" "cbz_cluster" {
   name     = "b34-cluster"
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
+    # This now only contains IDs from supported zones
     subnet_ids = data.aws_subnets.default.ids
   }
 
@@ -102,7 +98,6 @@ resource "aws_eks_cluster" "cbz_cluster" {
   ]
 }
 
-# Create a Node Group
 resource "aws_eks_node_group" "cbz_nodegroup" {
   cluster_name    = aws_eks_cluster.cbz_cluster.name
   node_group_name = "b34-node-group"
