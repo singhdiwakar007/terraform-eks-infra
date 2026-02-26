@@ -5,7 +5,7 @@ region = "us-east-1"
 
 terraform {
    backend "s3" {
-      bucket = "easy-crud-b34-bkt"
+      bucket = "state-ki-bkt"
       key    = "state/terraform.tfstate"
       region = "us-east-1"
   }
@@ -110,12 +110,12 @@ resource "aws_eks_node_group" "cbz_nodegroup" {
   subnet_ids      = data.aws_subnets.default.ids
 
   scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 2
+    desired_size = 1
+    max_size     = 1
+    min_size     = 1
   }
 
-  instance_types = ["m7i-flex.large"]
+  instance_types = ["t2.medium"]
 
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
